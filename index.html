@@ -313,6 +313,8 @@
     justify-content: space-between;
     width: 100%;
     padding: 0 4px;
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
   .ctrl-label {
@@ -320,6 +322,61 @@
     letter-spacing: 0.25em;
     text-transform: uppercase;
     color: var(--dim);
+  }
+
+  .mixer-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .crossfader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 220px;
+  }
+
+  .crossfader-label {
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+
+  .crossfader input[type="range"] {
+    width: 160px;
+    accent-color: #ff0080;
+    cursor: pointer;
+  }
+
+  .mixer-btn {
+    border: 1px solid rgba(0,245,255,0.35);
+    background: rgba(0,0,0,0.55);
+    color: #d7f9ff;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mixer-btn:hover {
+    border-color: var(--neon-cyan);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(0,245,255,0.25);
+  }
+
+  .mixer-btn.active {
+    border-color: var(--neon-pink);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(255,0,128,0.35);
   }
 
   .ctrl-lights {
@@ -490,6 +547,17 @@
       font-size: 8px;
       letter-spacing: 0.2em;
     }
+    .mixer-controls { gap: 6px; }
+    .crossfader {
+      min-width: 100%;
+      justify-content: center;
+    }
+    .crossfader input[type="range"] { width: min(240px, 72vw); }
+    .mixer-btn {
+      font-size: 8px;
+      letter-spacing: 0.12em;
+      padding: 5px 8px;
+    }
     .spotify-frame-wrapper iframe { height: 152px; }
 
     footer {
@@ -598,14 +666,26 @@
       </div>
 
       <div class="controls-strip">
-        <span class="ctrl-label">SYS::DUAL_FEED</span>
-        <div class="ctrl-lights">
+        <span class="ctrl-label" id="mix-status">MIX::DUAL</span>
+
+        <div class="mixer-controls" role="group" aria-label="Deck mixer">
+          <button class="mixer-btn" id="mix-a" type="button">Solo A</button>
+          <button class="mixer-btn" id="mix-b" type="button">Solo B</button>
+          <button class="mixer-btn active" id="mix-dual" type="button">Dual</button>
+
+          <div class="crossfader" aria-label="Crossfade control">
+            <span class="crossfader-label">A</span>
+            <input id="crossfader" type="range" min="0" max="100" value="50" step="1" />
+            <span class="crossfader-label">B</span>
+          </div>
+        </div>
+
+        <div class="ctrl-lights" aria-hidden="true">
           <div class="ctrl-light"></div>
           <div class="ctrl-light"></div>
           <div class="ctrl-light"></div>
           <div class="ctrl-light"></div>
         </div>
-        <span class="ctrl-label">◉ REC</span>
       </div>
     </div>
   </div>
@@ -898,6 +978,70 @@
     el.textContent = titles[0];
     el.style.opacity = '1';
   }, 800);
+})();
+
+// ── DECK MIXER (SOLO A / SOLO B / DUAL) ───────────────────────────────────
+(function() {
+  const playerA = document.getElementById('spotify-player-a');
+  const playerB = document.getElementById('spotify-player-b');
+  const btnA = document.getElementById('mix-a');
+  const btnB = document.getElementById('mix-b');
+  const btnDual = document.getElementById('mix-dual');
+  const status = document.getElementById('mix-status');
+  const crossfader = document.getElementById('crossfader');
+
+  const srcA = playerA.getAttribute('src');
+  const srcB = playerB.getAttribute('src');
+
+  function setActive(mode) {
+    [btnA, btnB, btnDual].forEach(b => b.classList.remove('active'));
+
+    if (mode === 'a') {
+      btnA.classList.add('active');
+      status.textContent = 'MIX::SOLO_A';
+      if (playerA.getAttribute('src') !== srcA) playerA.setAttribute('src', srcA);
+      playerB.setAttribute('src', 'about:blank');
+    } else if (mode === 'b') {
+      btnB.classList.add('active');
+      status.textContent = 'MIX::SOLO_B';
+      if (playerB.getAttribute('src') !== srcB) playerB.setAttribute('src', srcB);
+      playerA.setAttribute('src', 'about:blank');
+    } else {
+      btnDual.classList.add('active');
+      status.textContent = 'MIX::DUAL';
+      if (playerA.getAttribute('src') !== srcA) playerA.setAttribute('src', srcA);
+      if (playerB.getAttribute('src') !== srcB) playerB.setAttribute('src', srcB);
+    }
+  }
+
+  function setFromCrossfader(value) {
+    // Spotify embeds don't expose per-iframe volume control here,
+    // so crossfader uses zone switching: left=solo A, center=dual, right=solo B.
+    if (value <= 30) {
+      setActive('a');
+    } else if (value >= 70) {
+      setActive('b');
+    } else {
+      setActive('dual');
+    }
+  }
+
+  btnA.addEventListener('click', () => {
+    crossfader.value = 0;
+    setActive('a');
+  });
+  btnB.addEventListener('click', () => {
+    crossfader.value = 100;
+    setActive('b');
+  });
+  btnDual.addEventListener('click', () => {
+    crossfader.value = 50;
+    setActive('dual');
+  });
+
+  crossfader.addEventListener('input', () => {
+    setFromCrossfader(Number(crossfader.value));
+  });
 })();
 
 // ── BPM DISPLAY ───────────────────────────────────────────────────────────
